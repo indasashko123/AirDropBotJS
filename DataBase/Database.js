@@ -1,8 +1,8 @@
 const {Sequelize, DataTypes} = require('sequelize');
 module.exports = new Sequelize(
-    'testdb',
+    'tgbot',
     'root',
-    'root',
+    '97EPVOy0gdug',
     {
         host:'localhost',
         posr:'3306',
