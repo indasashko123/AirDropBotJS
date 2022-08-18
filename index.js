@@ -318,8 +318,28 @@ bot.hears("Рассылка", async (ctx) =>
 });
 
 
+bot.on('message', async ctx=>
+{
+   try
+   {
+       let com = ctx.message.text.split(" ")[0];
+       if (com === "Add")
+       {
+          let _link = ctx.message.text.split(" ")[1];
+          let _chatId = ctx.message.text.split(" ")[2];
+          let _name = ctx.message.text.split(" ")[3];
+          await SponsorModel.create
+          ({
+               chatId : _chatId,
+               link : _link,
+               name : _name
+          });
+       }
+   }
+   catch
+   {
 
-bot.on('message', async ctx=>{
+   }
    await ctx.reply("Возможно, вы имели в виду другую команду?");
 });
 
