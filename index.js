@@ -13,6 +13,8 @@ const startScene = new StartSceneGenerator();
 const greatingScene = startScene.GetCreetingScene();
 const sponsorsScene = startScene.GetSponsorScene();
 const capchaScene = startScene.GetCapchaScene();
+const passScene = startScene.GetPassScene();
+
 
 // VARIABLES AND CONSTANT
 const startDate = new Date(2022, 7, 14);
@@ -33,27 +35,10 @@ const conn = async() =>
     {
         console.log("ne podkluchilos", e);
     }
-    try 
-    {
-        let sponsors = await SponsorModel.findAll();
-        if (sponsors === null || sponsors.length === 0)
-        {
-            await SponsorModel.create(
-            {
-                link : "https://t.me/zxcvvcxzxxx",
-                chatId : "-1001577784145",
-                name : " @zxcvvcxzxxx"
-            });
-        }
-    }
-    catch(err)
-    {
-        console.log(err);
-    }
 }
 conn();
 
-const stage = new Scenes.Stage([greatingScene,sponsorsScene,capchaScene]);
+const stage = new Scenes.Stage([greatingScene,sponsorsScene,capchaScene, passScene]);
 bot.use(session());
 bot.use(stage.middleware());
 
@@ -114,35 +99,53 @@ bot.start(async (ctx)=>
     else
     {
         await ctx.reply("🗣 Поспешите пригласить друзей, тем самым увеличивая свой шанс на победу.\n\n" +
-        "ℹ️Бюджет розыгрыша составляет 15.000$"
-        , MainBoard);
+            "ℹ️Бюджет розыгрыша составляет 15.000$"
+            , MainBoard);
     }
 });
 
-bot.use(async (ctx, next)=>{
-    const _chatId = ctx.message.chat.id;
-    const [_currentUser, created] = await SubscriberModel.findOrCreate
-    ({
-        where:
+bot.use(async (ctx, next)=>
+{
+    try
+    {
+        const _chatId = ctx.message.chat.id;
+        
+        const [_currentUser, created] = await SubscriberModel.findOrCreate
+                ({
+                    where:
+                    {
+                        chatId: _chatId
+            },
+            defaults:
+                                {
+                chatId: _chatId,
+                passed : false,
+                referals : 0,
+                referal : 0,
+                tickets : 0
+                                }
+                            });
+        if (_currentUser.passed == false)
         {
-            chatId: _chatId
-        },
-        defaults:
-        {
-            chatId: _chatId,
-            passed : false,
-            referals : 0,
-            referal : 0,
-            tickets : 0
+            ctx.scene.enter("greating");
         }
-    });
-    if (_currentUser.passed == false)
-    {
-        ctx.scene.enter("greating");
+        else
+        {
+            next(ctx);
+        }
     }
-    else
+    catch
     {
-        next(ctx);
+        try
+        {
+            let messageId = ctx.update.callback_query.message.message_id;
+            await ctx.deleteMessage(messageId);
+        }     
+        catch
+        {
+            
+        }
+        await ctx.reply("Неизвестная команда");
     }
 })
 
@@ -172,12 +175,12 @@ bot.hears(MainBoard.reply_markup.keyboard[0][1], async ctx =>
         }
          catch
          {
-            
+
          }
     });
 
 /// Техподдержка
-bot.hears(MainBoard.reply_markup.keyboard[1][0], async ctx =>
+bot.hears(MainBoard.reply_markup.keyboard[2][0], async ctx =>
     {
         await ctx.replyWithPhoto({source : "./img/2.jpg"});
         await ctx.reply("📲Техническая поддержка\n\n\n"+
@@ -197,9 +200,24 @@ bot.hears(MainBoard.reply_markup.keyboard[0][0], async ctx =>
             "5 . За выполнение дополнительного задания или приглашение друзей, участник получает 1 номерной билет, за каждого приглашённого друга по своей ссылке, это означает, что у вас может быть сразу несколько выигрышных билетов, соотвественно и больше призов"
             );
     });
-
-/// Статичтика
 bot.hears(MainBoard.reply_markup.keyboard[1][1], async ctx =>
+        {
+            await ctx.replyWithPhoto({source: "./img/5.jpg"});
+            await ctx.reply("Хочешь получить до 500$?\n\n"+ 
+                "Просто проявляй активность на каналах наших спонсоров, пиши комментарии под постами, ставь реакции, общайся в чатах, короче будь активным и позитивным😉\n\n"+    
+                "В течении всего розыгрыша, случайным образом мы будем выбирать самых активных и позитивных и дарить им  CRYPTOBOX с суммой до 500$💥\n\n"+
+                "⚡️Требования:\n"+
+                "– Комментарии должны быть аргументированными и по теме постов.\n"+
+                "–Общаться в чатах без негатива и оскорблений.\n"+
+                "–Проявлять активность у всех спонсоров.\n"+
+                "–Не выключать уведомления.\n\n"+
+                "💰От чего зависит бонус:\n"+
+                "– Активность\n"+
+                "– Позитив\n"+
+                "– Вовлечённость на каналах");
+        });
+/// Статиcтика
+bot.hears(MainBoard.reply_markup.keyboard[1][0], async ctx =>
     {
         let userCount = await SubscriberModel.findAll();
         let ticketCount = await TicketModel.findAll();
@@ -290,6 +308,14 @@ bot.hears("GetAllTickets", async ctx =>
         }
     }
 });
+bot.hears("Рассылка", async (ctx) => 
+{
+    let check = await CheckAdmin(ctx.message.chat.id);
+    if (check === true)
+    {
+        await ctx.reply("Сообщение для рассылки ->");       
+    }
+});
 
 
 
@@ -307,6 +333,17 @@ bot.on('message', async ctx=>{
 
 
 
+async function CheckAdmin(chatId)
+{
+    for (let i = 0; i< adminChatId.length; i++)
+    {
+        if (adminChatId[i] == chatId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 bot.launch();
 process.once("SIGINT", ()=> bot.stop("SIGINT"));

@@ -6,7 +6,8 @@ const MainBoard = Markup.keyboard
 (
     [
         ["❗️Правила",'👥Реферальная программа'],
-        ['🧑‍💻Техподдержка', "📊Статистика"]
+        [ "📊Статистика", "🔥Получить до 500$"],
+        ['🧑‍💻Техподдержка',]
     ]
 ).resize();
 
@@ -31,4 +32,27 @@ const StartButton = Markup.inlineKeyboard
     Markup.button.callback("Принять участие", "started")
 ]);
 
-module.exports = {CheckButton,GetSponsors,MainBoard, StartButton};
+
+const GetCaptcha = (async (captcha)=>
+{
+    let markup = [];
+    for (let i = 0; i<3;i++)
+    {
+        markup[i] = [];
+        for (let j = 0; j<3; j++)
+        {
+            let pos = (i*3)+j;            
+            let ans = 0;
+            if (captcha.value[pos] === captcha.answer)
+            {
+                ans = 1;
+            }
+            let callback = `${ans}/${i}/${j}`;
+            markup[i][j] = Markup.button.callback(captcha.Symbols[captcha.value[pos]],callback);
+        }
+    }
+    return Markup.inlineKeyboard(markup);
+});
+
+
+module.exports = {CheckButton,GetSponsors,MainBoard, StartButton,GetCaptcha};

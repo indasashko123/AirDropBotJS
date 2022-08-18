@@ -1,6 +1,6 @@
-const {Scenes} = require('telegraf');
+const {Scenes, Markup} = require('telegraf');
 const {SponsorModel, SubscriberModel, TicketModel} = require('../DataBase/Models/Models');
-const {CheckButton, GetSponsors, MainBoard, StartButton } = require('../Keyboards/UserKeyboards');
+const {CheckButton, GetSponsors, MainBoard, StartButton,GetCaptcha } = require('../Keyboards/UserKeyboards');
 const CheckSubscribing = require("../util/CheckSubscribing");
 const {GetValues} = require("../util/Capcha");
 
@@ -31,7 +31,7 @@ class StartSceneGenerator
         });
         greating.on('message', async (ctx)=>
         {
-            await ctx.reply("Чтобы продолжить нужно нажать кнопку СТАРТ");
+            await ctx.reply("Чтобы продолжить нужно нажать кнопку - \"Принять участие\"");
         });
         return greating;
     }
@@ -59,22 +59,70 @@ class StartSceneGenerator
     GetCapchaScene()
     {
         const capchaScene = new Scenes.BaseScene("capchaScene");
-        let capchaString;
         capchaScene.enter(async ctx=>
         {
             let capcha = await GetValues();
-            await ctx.reply(
-                `Чтобы убедиться что все честно - пройдите капчу\n\n`+
-                `Напишите в сообщении боту число: \n\n`+
-                 `   --- ${capcha}---`);
-            capchaString = capcha;
+            await ctx.reply( `Чтобы убедиться что все честно - пройдите капчу\n\n`+
+            `Выбирите все кнопки на которых изображжено : \n\n`+
+            `                                  ${capcha.Symbols[capcha.answer]}${capcha.Names[capcha.answer]}${capcha.Symbols[capcha.answer]}\n`
+            ,await GetCaptcha(capcha));
         });
-        capchaScene.on('text', async (ctx)=>
+        capchaScene.on('callback_query', async (ctx)=>
         {
-            if (ctx.message.text == capchaString)
+            try
             {
-                const _chatId = ctx.update.message.from.id
-                let check = await CheckSubscribing(_chatId, ctx);
+                if (ctx.session.__scenes.state.answer === undefined)
+                {
+                   ctx.session.__scenes.state.answer = 0;
+                }
+                let messageId = ctx.update.callback_query.message.message_id;
+                let data = ctx.update.callback_query.data;
+                if (data.split("/")[0] === "0")
+                {
+                    await ctx.deleteMessage(messageId);
+                    await ctx.scene.reenter();
+                    ctx.session.__scenes.state.answer = 0;
+                    return;
+                }     
+                let reply_markup = ctx.update.callback_query.message.reply_markup;
+                reply_markup.inline_keyboard[data.split("/")[1]][data.split("/")[2]].text = "👍";
+                reply_markup.inline_keyboard[data.split("/")[1]][data.split("/")[2]].callback_data = `0/${data.split("/")[1]}/${data.split("/")[2]}`;
+                await ctx.editMessageReplyMarkup(reply_markup);
+                ctx.session.__scenes.state.answer += 1;
+                if (ctx.session.__scenes.state.answer == 3)
+                {
+                    await ctx.deleteMessage(messageId);
+                    await ctx.scene.enter("passScene");
+                }
+            }
+            catch
+            {
+                ctx.session.__scenes.state.answer = 0;
+                let messageId = ctx.update.callback_query.message.message_id;
+                await ctx.deleteMessage(messageId);
+                await ctx.scene.reenter();
+            }
+            
+        });
+        capchaScene.hears("Новая капча", async (ctx)=>
+        {
+            ctx.session.__scenes.state.answer = 0;
+            await ctx.scene.reenter(); 
+        });
+        capchaScene.on('message', async (ctx)=>
+        {
+            ctx.session.__scenes.state.answer = 0;
+            await ctx.reply("нужно пройти капчу", Markup.keyboard(["Новая капча"]).resize());
+        });
+        return capchaScene;
+    }
+    GetPassScene()
+    {
+        const passScene = new Scenes.BaseScene("passScene");
+        passScene.enter(async ctx=>
+        {
+            let _chatId = ctx.callbackQuery.message.chat.id;
+            let check = await CheckSubscribing(_chatId, ctx);
                 if (check === true)
                 {
                     const _subscriber = await SubscriberModel.findOne
@@ -127,27 +175,16 @@ class StartSceneGenerator
                 }
                 else
                 {
-                   await ctx.answerCbQuery("Вы подписались не на все каналы.\n\n"+
+                   await ctx.reply("Вы подписались не на все каналы.\n\n"+
                    " Подпишитесь на каналы пройдите капчу");
-                   await ctx.scene.reenter();
-                }
-            }
-            else
-            {
-                await ctx.reply("Не правильно введено число.\n\n"+
-                   "Подпишитесь на каналы пройдите капчу");
-                   await ctx.scene.reenter();
-            }
+                   await ctx.scene.enter("sponsorScene");
+                } 
         });
-        capchaScene.on('message', async (ctx)=>
-        {
-            await ctx.reply("нужно пройти капчу");
-            await ctx.scene.leave();
-        });
-        return capchaScene;
+        return passScene;
     }
-    
 }
 
 module.exports = StartSceneGenerator;
 
+
+                
