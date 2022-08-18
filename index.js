@@ -109,7 +109,6 @@ bot.use(async (ctx, next)=>
     try
     {
         const _chatId = ctx.message.chat.id;
-        
         const [_currentUser, created] = await SubscriberModel.findOrCreate
                 ({
                     where:
@@ -145,7 +144,14 @@ bot.use(async (ctx, next)=>
         {
             
         }
-        await ctx.reply("Неизвестная команда");
+        try
+        {
+            await ctx.reply("Неизвестная команда");
+        }
+        catch
+        {
+            
+        }
     }
 })
 
@@ -261,7 +267,11 @@ bot.hears("GetAllSponsors", async(ctx)=>
     {
         for (let i = 0; i< _sponsors.length; i++)
         {
-            await ctx.reply(`id - ${_sponsors[i].id}`);
+            await ctx.reply(
+                `id:  ${_sponsors[i].id}\n`+
+                `chatId:  ${_sponsors[i].chatId}\n`+
+                `link:   ${_sponsors[i].link}\n`+
+                `name:  ${_sponsors[i].name}`);
         }
     }
     else
@@ -322,23 +332,25 @@ bot.on('message', async ctx=>
 {
    try
    {
-       let com = ctx.message.text.split(" ")[0];
-       if (com === "Add")
+       let com = ctx.message.text.split("|")[0];
+       if (com == "Add")
        {
-          let _link = ctx.message.text.split(" ")[1];
-          let _chatId = ctx.message.text.split(" ")[2];
-          let _name = ctx.message.text.split(" ")[3];
+          let _link = ctx.message.text.split("|")[1];
+          let _chatId = ctx.message.text.split("|")[2];
+          let _name = ctx.message.text.split("|")[3];
+
+          await ctx.reply(`${_link}    ${_chatId}     ${_name}`);
           await SponsorModel.create
           ({
-               chatId : _chatId,
                link : _link,
+               chatId : _chatId, 
                name : _name
           });
        }
    }
-   catch
+   catch(err)
    {
-
+       console.log(err);
    }
    await ctx.reply("Возможно, вы имели в виду другую команду?");
 });

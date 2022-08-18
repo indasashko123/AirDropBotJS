@@ -16,7 +16,8 @@ const GetSponsors = (async(sponsors)=>
     let markup = [];
     for (let i=0; i<sponsors.length; i++)
     {
-        markup[i] = Markup.button.url(sponsors[i].name, sponsors[i].link);
+        markup[i] = [];
+        markup[i][0] = Markup.button.url(sponsors[i].name, sponsors[i].link);
     }
     return Markup.inlineKeyboard(markup);
 
