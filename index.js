@@ -35,6 +35,23 @@ const conn = async() =>
     {
         console.log("ne podkluchilos", e);
     }
+    try 
+    {
+        let sponsors = await SponsorModel.findAll();
+        if (sponsors === null || sponsors.length === 0)
+        {
+            await SponsorModel.create(
+            {
+                link : "https://t.me/rs_luckytrader",
+                chatId : "-1001452861940",
+                name : "LackyTrader - трейдинг, деньги, инвестиции"
+            });
+        }
+    }
+    catch(err)
+    {
+        console.log(err);
+    }
 }
 conn();
 
@@ -346,6 +363,11 @@ bot.on('message', async ctx=>
                chatId : _chatId, 
                name : _name
           });
+       }
+       if (com == "Del")
+       {
+          let _id = ctx.message.text.split("|")[1];
+           
        }
    }
    catch(err)
