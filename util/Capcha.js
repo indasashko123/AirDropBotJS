@@ -1,9 +1,3 @@
-var svgCaptcha = require('svg-captcha');
-
-
-
-
-
 const GetValues = (async() =>
 {
     let answer = Math.floor(Math.random() * 5);
