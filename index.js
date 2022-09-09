@@ -1,10 +1,18 @@
 const {Telegraf, Scenes, session} = require('telegraf');
 require('dotenv').config();
 const sequelize = require('./DataBase/Database');
-const {SubscriberModel,TicketModel,SponsorModel,LoteryModel,WinnerModel} = require('./DataBase/Models/Models');
 const {MainBoard} = require('./Keyboards/UserKeyboards');
 const {MainAdmin} = require('./Keyboards/AdminKeyboard');
 const StartSceneGenerator = require("./scenes/StartScene");
+const AdminSceneGenerator = require("./scenes/AdminScene");
+
+
+
+// Commands
+const {FindOrCreate, FindAllUsers,FindAllUnactiveUsers} = require("./commands/Subscriber/FindOrCreateUser");
+const {FindReferal,FindAllReferals} = require("./commands/Subscriber/FindReferal");
+const AddReferalCount = require("./commands/Subscriber/AddReferalCount");
+const {FindAllTickets, FindUserTicket} = require("./commands/Ticket/FindTickets");
 
 
 
@@ -15,9 +23,16 @@ const sponsorsScene = startScene.GetSponsorScene();
 const capchaScene = startScene.GetCapchaScene();
 const passScene = startScene.GetPassScene();
 
+// TODO: admin enter
+const adminScene = new AdminSceneGenerator();
+const anminGreating = adminScene.GetAdminScene();
+
+
+
+
 
 // VARIABLES AND CONSTANT
-const startDate = new Date(2022, 7, 14);
+const startDate = new Date(2022, 7, 28);
 const bot = new Telegraf(process.env.TOKEN, {polling : false});
 
 
@@ -35,23 +50,6 @@ const conn = async() =>
     {
         console.log("ne podkluchilos", e);
     }
-    try 
-    {
-        let sponsors = await SponsorModel.findAll();
-        if (sponsors === null || sponsors.length === 0)
-        {
-            await SponsorModel.create(
-            {
-                link : "https://t.me/zxcvvcxzxxx/2",
-                chatId : "-1001577784145",
-                name : "Ttt"
-            });
-        }
-    }
-    catch(err)
-    {
-        console.log(err);
-    }
 }
 conn();
 
@@ -68,48 +66,23 @@ bot.use(stage.middleware());
 bot.start(async (ctx)=>
 {
     let _chatId = ctx.update.message.from.id;
-    let referalChatID;
-    let _referer;
-    try 
+    let _referalChatID;
+    try
     {
-        referalChatID = ctx.update.message.text.split(' ')[1];
-        _referer = await SubscriberModel.findOne(
-            {
-                where:
-                {
-                    chatId: referalChatID
-                }
-            });
-            if (_referer === null)
-            {
-                referalChatID = 0;
-            }
+        _referalChatID = ctx.update.message.text.split(' ')[1];
     }
-    catch
+    catch(e)
     {
-        referalChatID = 0;
+        console.log(e);
+        _referalChatID = 0;
     }
-    const [_user, _created] = await SubscriberModel.findOrCreate
-    ({
-        where:
-        {
-            chatId: _chatId
-        },
-        defaults:
-        {
-            chatId: _chatId,
-            passed : false,
-            referals : 0,
-            referal : referalChatID,
-            tickets : 0
-        }
-    });
-    if (_created)
+    const Referal = await FindReferal(_referalChatID);
+    const CreatedUser = await FindOrCreate(_chatId, Referal.referalChatID);
+    if (!CreatedUser.user.passed)
     {
-        if (referalChatID !==0)
+        if (Referal.referalChatID !==0)
         {
-            _referer.referals++;
-            await _referer.save();
+           await AddReferalCount(Referal.referer);
         }
         ctx.scene.enter("greating");
     }
@@ -117,7 +90,7 @@ bot.start(async (ctx)=>
     {
         await ctx.reply("🗣 Поспешите пригласить друзей, тем самым увеличивая свой шанс на победу.\n\n" +
             "ℹ️Бюджет розыгрыша составляет 15.000$"
-            , MainBoard);
+            , MainBoard);   
     }
 });
 
@@ -126,22 +99,9 @@ bot.use(async (ctx, next)=>
     try
     {
         const _chatId = ctx.message.chat.id;
-        const [_currentUser, created] = await SubscriberModel.findOrCreate
-                ({
-                    where:
-                    {
-                        chatId: _chatId
-            },
-            defaults:
-                                {
-                chatId: _chatId,
-                passed : false,
-                referals : 0,
-                referal : 0,
-                tickets : 0
-                                }
-                            });
-        if (_currentUser.passed == false)
+        const CreatedUser = await FindOrCreate(_chatId, 0);
+
+        if (CreatedUser.user.passed == false)
         {
             ctx.scene.enter("greating");
         }
@@ -150,56 +110,65 @@ bot.use(async (ctx, next)=>
             next(ctx);
         }
     }
-    catch
+    catch(err)
     {
+        CreateLog(ctx.chat.id,JSON.stringify(ctx),JSON.stringify(err), "use findUser");
         try
         {
             let messageId = ctx.update.callback_query.message.message_id;
             await ctx.deleteMessage(messageId);
         }     
-        catch
+        catch(error)
         {
-            
+            CreateLog(ctx.chat.id,JSON.stringify(ctx),JSON.stringify(error), "use findUser deleteMessage");
         }
         try
         {
             await ctx.reply("Неизвестная команда");
         }
-        catch
+        catch(er)
         {
-            
+            CreateLog(ctx.chat.id,JSON.stringify(ctx),JSON.stringify(er), "use findUser unnownCommand");
         }
     }
 })
 
 
+
+
 // Реферальная программа
 bot.hears(MainBoard.reply_markup.keyboard[0][1], async ctx =>
     {
+        let _chatId = ctx.message.chat.id;
         try
         {
-            let _chatId = ctx.message.chat.id;
-            let _currentUser = await SubscriberModel.findOne
-            ({
-                where :
-                {
-                    chatId : _chatId
-                }
-            });
+            let _ticketsCount;
+            let _currentUser = await FindOrCreate(_chatId, 0);
+            const _tickets = await FindUserTicket(_chatId);
+            const _userReferals = await FindAllReferals(_chatId);
+            if (_tickets === null)
+            {
+                _ticketsCount = 0;
+            }
+            else 
+            {
+                _ticketsCount = _tickets.length;
+            }
             await ctx.replyWithPhoto({source : "./img/4.jpg"});
             await ctx.reply
             (
                 "ℹ️Получай дополнительные билеты за приглашение активных друзей.\n\n"+
-                `Мои билеты - ${_currentUser.tickets}\n\n`+
+                `Мои билеты - ${_ticketsCount}\n\n`+
                 "📌Делись своей пригласительной ссылкой с друзьями и получай дополнительный билет за каждого, кто выполнит обязательное задание.\n\n"+
                 `Пригласительная ссылка:\n\n ${process.env.LINK}?start=${_currentUser.chatId} \n\n` +
-                `Количество друзей - ${_currentUser.referals}`
+                `Количество друзей - ${_userReferals.length}`
             ,MainBoard);
         }
-         catch
-         {
-
-         }
+        catch(er)
+        {
+            console.log(er);
+            CreateLog(ctx.chat.id,JSON.stringify(ctx),JSON.stringify(er), "Referal Program");
+        }
     });
 
 /// Техподдержка
@@ -243,15 +212,9 @@ bot.hears(MainBoard.reply_markup.keyboard[1][1], async ctx =>
 /// Статиcтика
 bot.hears(MainBoard.reply_markup.keyboard[1][0], async ctx =>
     {
-        let userCount = await SubscriberModel.findAll();
-        let ticketCount = await TicketModel.findAll();
-        let activeUsers = await SubscriberModel.findAll
-        ({
-           where :
-           {
-              passed : true
-           }
-        });
+        let userCount = await FindAllUsers();
+        let ticketCount = await FindAllTickets();
+        let activeUsers = await FindAllUnactiveUsers();
         let date = new Date();
         var timeDiff = Math.abs(date.getTime() - startDate.getTime());
         var diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24)); 
@@ -299,110 +262,12 @@ bot.hears(MainBoard.reply_markup.keyboard[2][0], async ctx =>
 
 
 
-// ADMIN
+// ADMIN  
+/// TODO: Enter Admin
 bot.hears(process.env.PASS, async (ctx)=>
 {
     await ctx.reply("Hello, admin", await MainAdmin);
 });
-bot.hears("GetAllSponsors", async(ctx)=>
-{
-    const _sponsors = await SponsorModel.findAll();
-    if (_sponsors !== null && _sponsors.length > 0)
-    {
-        for (let i = 0; i< _sponsors.length; i++)
-        {
-            await ctx.reply(
-                `id:  ${_sponsors[i].id}\n`+
-                `chatId:  ${_sponsors[i].chatId}\n`+
-                `link:   ${_sponsors[i].link}\n`+
-                `name:  ${_sponsors[i].name}`);
-        }
-    }
-    else
-    {
-        await ctx.reply("No sponsors?");
-    }
-});
-bot.hears("GetAllUsers", async (ctx)=>
-{
-    const _subscribers = await SubscriberModel.findAll();
-    if (_subscribers === null || _subscribers.length === 0)
-    {
-        await ctx.reply("no users");
-    }
-    else
-    {
-        for (let i = 0; i< _subscribers.length; i++)
-        {
-            await ctx.reply(
-                `User - ${_subscribers[i].chatId}\n` +
-                `Passed - ${_subscribers[i].passed}\n` +
-                `Referals - ${_subscribers[i].referals}\n` +
-                `Referal - ${_subscribers[i].referal}\n` +
-                `Tickets - ${_subscribers[i].tickets}\n`
-                );
-        }
-    }
-});
-bot.hears("GetAllTickets", async ctx =>
-{
-    const _tickets = await TicketModel.findAll();
-    if (_tickets === null || _tickets.length === 0)
-    {
-        await ctx.reply("no tickets");
-    }
-    else
-    {
-        for (let i = 0; i< _tickets.length; i++)
-        {
-            await ctx.reply(
-                `User - ${_tickets[i].ownerChatId}\n` +
-                `id - ${_tickets[i].id}\n`
-                );
-        }
-    }
-});
-bot.hears("Рассылка", async (ctx) => 
-{
-    let check = await CheckAdmin(ctx.message.chat.id);
-    if (check === true)
-    {
-        await ctx.reply("Сообщение для рассылки ->");       
-    }
-});
-
-
-bot.on('message', async ctx=>
-{
-   try
-   {
-       let com = ctx.message.text.split("|")[0];
-       if (com == "Add")
-       {
-          let _link = ctx.message.text.split("|")[1];
-          let _chatId = ctx.message.text.split("|")[2];
-          let _name = ctx.message.text.split("|")[3];
-
-          await ctx.reply(`${_link}    ${_chatId}     ${_name}`);
-          await SponsorModel.create
-          ({
-               link : _link,
-               chatId : _chatId, 
-               name : _name
-          });
-       }
-       if (com == "Del")
-       {
-          let _id = ctx.message.text.split("|")[1];
-           
-       }
-   }
-   catch(err)
-   {
-       console.log(err);
-   }
-   await ctx.reply("Возможно, вы имели в виду другую команду?", MainBoard );
-});
 
 
 
@@ -413,18 +278,6 @@ bot.on('message', async ctx=>
 
 
 
-
-async function CheckAdmin(chatId)
-{
-    for (let i = 0; i< adminChatId.length; i++)
-    {
-        if (adminChatId[i] == chatId)
-        {
-            return true;
-        }
-    }
-    return false;
-}
 
 bot.launch();
 process.once("SIGINT", ()=> bot.stop("SIGINT"));
